@@ -190,6 +190,43 @@ TEST_F(ImsMediaImageRotateTest, Rotate270WithOutStrideTest)
     EXPECT_EQ(memcmp(output_img, exp_img, img_buf_size), 0);
 }
 
+TEST_F(ImsMediaImageRotateTest, RotateRejectsUndersizedOutputWithoutWriting)
+{
+    constexpr uint16_t kWidth = 4;
+    constexpr uint16_t kHeight = 4;
+    uint8_t inputY[kWidth * kHeight] = {};
+    uint8_t inputUv[kWidth * kHeight / 2] = {};
+    uint8_t guardedOutput[kWidth * kHeight * 3 / 2 + 2] = {};
+    guardedOutput[0] = 0xAA;
+    guardedOutput[sizeof(guardedOutput) - 1] = 0xBB;
+
+    EXPECT_EQ(ImsMediaImageRotate::YUV420_SP_Rotate90(guardedOutput + 1,
+                      sizeof(guardedOutput) - 3, kHeight, inputY, inputUv, kWidth, kHeight),
+            -1);
+    EXPECT_EQ(ImsMediaImageRotate::YUV420_SP_Rotate270(guardedOutput + 1,
+                      sizeof(guardedOutput) - 3, kHeight, inputY, inputUv, kWidth, kHeight),
+            -1);
+    EXPECT_EQ(guardedOutput[0], 0xAA);
+    EXPECT_EQ(guardedOutput[sizeof(guardedOutput) - 1], 0xBB);
+}
+
+TEST_F(ImsMediaImageRotateTest, RotateRejectsOddNv12Stride)
+{
+    constexpr uint16_t kWidth = 4;
+    constexpr uint16_t kHeight = 4;
+    constexpr uint16_t kOddStride = 5;
+    uint8_t inputY[kWidth * kHeight] = {};
+    uint8_t inputUv[kWidth * kHeight / 2] = {};
+    uint8_t output[kOddStride * kWidth * 3 / 2] = {};
+
+    EXPECT_EQ(ImsMediaImageRotate::YUV420_SP_Rotate90(
+                      output, sizeof(output), kOddStride, inputY, inputUv, kWidth, kHeight),
+            -1);
+    EXPECT_EQ(ImsMediaImageRotate::YUV420_SP_Rotate270(
+                      output, sizeof(output), kOddStride, inputY, inputUv, kWidth, kHeight),
+            -1);
+}
+
 TEST_F(ImsMediaImageRotateTest, Rotate270Test_ZeroImageSize)
 {
     const uint16_t img_width = 0, img_height = 0;
@@ -249,4 +286,21 @@ TEST_F(ImsMediaImageRotateTest, Rotate90PlanarTest_ZeroImageSize)
     ImsMediaImageRotate::YUV420_Planar_Rotate90_Flip(output_img, input_img, img_width, img_height);
 
     EXPECT_EQ(memcmp(output_img, exp_img, 0), 0);
+}
+
+TEST_F(ImsMediaImageRotateTest, FlipRejectsInvalidLayoutsWithoutWriting)
+{
+    uint8_t source[24] = {};
+    uint8_t output[24];
+    memset(output, 0x5a, sizeof(output));
+    ImsMediaImageRotate::YUV420_Planar_Rotate90_Flip(output, source, 0, 4);
+    ImsMediaImageRotate::YUV420_Planar_Rotate90_Flip(output, source, 3, 4);
+    ImsMediaImageRotate::YUV420_Planar_Rotate90_Flip(output, nullptr, 4, 4);
+    ImsMediaImageRotate::YUV420_SP_Rotate90_Flip(output, source, source + 16, 4, 0);
+    ImsMediaImageRotate::YUV420_SP_Rotate90_Flip(output, source, source + 16, 4, 3);
+    ImsMediaImageRotate::YUV420_SP_Rotate90_Flip(output, source, nullptr, 4, 4);
+    for (uint8_t byte : output)
+    {
+        EXPECT_EQ(byte, 0x5a);
+    }
 }
