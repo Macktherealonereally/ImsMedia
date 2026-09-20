@@ -71,10 +71,7 @@ MediaQualityAnalyzer::MediaQualityAnalyzer()
 
 MediaQualityAnalyzer::~MediaQualityAnalyzer()
 {
-    if (!IsThreadStopped())
-    {
-        stop();
-    }
+    stop();
 }
 
 void MediaQualityAnalyzer::setConfig(AudioConfig* config)
@@ -175,8 +172,10 @@ void MediaQualityAnalyzer::stop()
     {
         StopThread();
         mConditionExit.wait_timeout(STOP_TIMEOUT);
+        JoinThread();
         notifyCallQuality();
     }
+    JoinThread();
 
     reset();
 }

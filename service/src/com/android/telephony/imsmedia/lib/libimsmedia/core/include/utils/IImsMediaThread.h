@@ -18,6 +18,9 @@
 #define IIMS_MEDIA_THREAD
 
 #include <ImsMediaMutex.h>
+#include <atomic>
+#include <mutex>
+#include <pthread.h>
 
 #define MAX_EVENTHANDLER_NAME 256
 
@@ -37,7 +40,7 @@ public:
     virtual ~IImsMediaThread();
 
     /**
-     * @brief Starts the new thread execution and detaches from the calling thread.
+     * @brief Starts an owned worker. A previous stopped worker is joined before reuse.
      *
      * @param name Optional param. If passed, used to set name for the thread.
      *               Helpful for debugging.
@@ -62,6 +65,11 @@ public:
      */
     void StopThread();
 
+    /** Waits for the worker to return. Wake any worker-specific wait before calling.
+     * Derived destructors must join before releasing resources used by run().
+     */
+    void JoinThread();
+
     /**
      * @brief Used to check if the thread is running.
      */
@@ -74,8 +82,10 @@ public:
     virtual void* run() = 0;
 
 private:
-    ImsMediaMutex mThreadMutex;
-    bool mThreadStopped;
+    std::mutex mLifecycleMutex;
+    pthread_t mThread{};
+    bool mJoinable = false;
+    std::atomic<bool> mThreadStopped;
 };
 
 #endif

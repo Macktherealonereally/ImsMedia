@@ -30,7 +30,10 @@ void ImsMediaEventHandler::Init(const char* strName)
 {
     strncpy(mName, strName, MAX_EVENTHANDLER_NAME);
     mbTerminate = false;
-    sListEventHandler.push_back(this);
+    {
+        ImsMediaMutex::Autolock lock(sMutex);
+        sListEventHandler.push_back(this);
+    }
     IMLOGD1("[Init] %s", mName);
     StartThread("ImsMediaEventHandler");
 }
@@ -38,15 +41,21 @@ void ImsMediaEventHandler::Init(const char* strName)
 void ImsMediaEventHandler::Deinit()
 {
     IMLOGD2("[Deinit] %s, queue size[%d]", mName, mListevent.size());
-    ImsMediaMutex::Autolock lock(mMutexEvent);
     StopThread();
-    sListEventHandler.remove(this);
-    mListevent.clear();
-    mListParamA.clear();
-    mListParamB.clear();
-    mListParamC.clear();
-    mCondition.signal();
-    mConditionExit.wait();
+    {
+        ImsMediaMutex::Autolock lock(sMutex);
+        sListEventHandler.remove(this);
+    }
+    {
+        ImsMediaMutex::Autolock lock(mMutexEvent);
+        mListevent.clear();
+        mListParamA.clear();
+        mListParamB.clear();
+        mListParamC.clear();
+        mCondition.signal();
+    }
+    // Do not hold the queue lock while the worker finishes a queued callback.
+    JoinThread();
 }
 
 void ImsMediaEventHandler::SendEvent(const char* strEventHandlerName, uint32_t event,

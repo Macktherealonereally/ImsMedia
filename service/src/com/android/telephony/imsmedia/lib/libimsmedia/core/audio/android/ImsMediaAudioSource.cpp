@@ -210,6 +210,7 @@ void ImsMediaAudioSource::Stop()
         StopThread();
         mConditionExit.wait_timeout(AAUDIO_RECOVERY_STOP_TIMEOUT_MS);
     }
+    JoinThread();
 
     ImsMediaMutex::Autolock lock(mMutexUplink);
 

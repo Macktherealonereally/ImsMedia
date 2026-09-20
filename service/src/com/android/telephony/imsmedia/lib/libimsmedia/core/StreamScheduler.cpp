@@ -61,6 +61,11 @@ void StreamScheduler::DeRegisterNode(BaseNode* pNode)
 ImsMediaResult StreamScheduler::Start()
 {
     IMLOGD1("[Start] [%p] enter", this);
+    if (!IsThreadStopped())
+    {
+        return RESULT_NOT_READY;
+    }
+    JoinThread();
 
     for (auto& node : mListRegisteredNode)
     {
@@ -96,6 +101,7 @@ ImsMediaResult StreamScheduler::Start()
         StopThread();
         Awake();
         mConditionExit.wait_timeout(STOP_WAIT_TIMEOUT_MS);
+        JoinThread();
         return RESULT_NOT_READY;
     }
 
@@ -104,6 +110,7 @@ ImsMediaResult StreamScheduler::Start()
     if (result != RESULT_SUCCESS)
     {
         mConditionExit.wait_timeout(STOP_WAIT_TIMEOUT_MS);
+        JoinThread();
     }
 
     IMLOGD2("[Start] [%p] exit result[%d]", this, result);
@@ -121,6 +128,8 @@ void StreamScheduler::Stop()
         mConditionExit.wait_timeout(STOP_WAIT_TIMEOUT_MS);
     }
 
+    // A timeout or exit notification is not proof that run() has returned.
+    JoinThread();
     IMLOGD1("[Stop] [%p] exit", this);
 }
 

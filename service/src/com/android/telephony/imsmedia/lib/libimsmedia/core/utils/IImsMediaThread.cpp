@@ -29,7 +29,11 @@ IImsMediaThread::IImsMediaThread()
     mThreadStopped = true;
 }
 
-IImsMediaThread::~IImsMediaThread() {}
+IImsMediaThread::~IImsMediaThread()
+{
+    StopThread();
+    JoinThread();
+}
 
 void* runThread(void* arg)
 {
@@ -40,17 +44,32 @@ void* runThread(void* arg)
     }
 
     IImsMediaThread* thread = reinterpret_cast<IImsMediaThread*>(arg);
-    return thread->run();
+    void* result = thread->run();
+    thread->StopThread();
+    return result;
 }
 
 bool IImsMediaThread::StartThread(const char* name)
 {
     IMLOGD1("[StartThread] name:%s", name != nullptr ? name : "(null)");
-    ImsMediaMutex::Autolock lock(mThreadMutex);
+    std::lock_guard<std::mutex> lock(mLifecycleMutex);
+    if (mJoinable)
+    {
+        if (!mThreadStopped.load() || pthread_equal(mThread, pthread_self()))
+        {
+            IMLOGE0("[StartThread] worker is still running");
+            return false;
+        }
+        const int error = pthread_join(mThread, nullptr);
+        if (error != 0)
+        {
+            IMLOGE1("[StartThread] unable to join previous worker: %s", strerror(error));
+            return false;
+        }
+        mJoinable = false;
+    }
     mThreadStopped = false;
-
-    pthread_t thread;
-    const int threadError = pthread_create(&thread, nullptr, runThread, this);
+    const int threadError = pthread_create(&mThread, nullptr, runThread, this);
     if (threadError != 0)
     {
         mThreadStopped = true;
@@ -58,6 +77,7 @@ bool IImsMediaThread::StartThread(const char* name)
         return false;
     }
 
+    mJoinable = true;
     if (name)
     {
         if (strlen(name) >= MAX_THREAD_NAME_LEN)
@@ -65,19 +85,14 @@ bool IImsMediaThread::StartThread(const char* name)
             char shortname[MAX_THREAD_NAME_LEN];
             strncpy(shortname, name, MAX_THREAD_NAME_LEN - 1);
             shortname[MAX_THREAD_NAME_LEN - 1] = '\0';
-            pthread_setname_np(thread, shortname);
+            pthread_setname_np(mThread, shortname);
         }
         else
         {
-            pthread_setname_np(thread, name);
+            pthread_setname_np(mThread, name);
         }
     }
 
-    const int detachError = pthread_detach(thread);
-    if (detachError != 0)
-    {
-        IMLOGE1("[StartThread] unable to detach thread: %s", strerror(detachError));
-    }
     return true;
 }
 
@@ -90,12 +105,28 @@ void IImsMediaThread::SetThreadPriority(pid_t pid, pid_t tid, int priority)
 
 void IImsMediaThread::StopThread()
 {
-    ImsMediaMutex::Autolock lock(mThreadMutex);
     mThreadStopped = true;
 }
 
 bool IImsMediaThread::IsThreadStopped()
 {
-    ImsMediaMutex::Autolock lock(mThreadMutex);
-    return mThreadStopped;
+    return mThreadStopped.load();
+}
+
+void IImsMediaThread::JoinThread()
+{
+    std::lock_guard<std::mutex> lock(mLifecycleMutex);
+    if (!mJoinable || pthread_equal(mThread, pthread_self()))
+    {
+        return;
+    }
+    const int error = pthread_join(mThread, nullptr);
+    if (error == 0)
+    {
+        mJoinable = false;
+    }
+    else
+    {
+        IMLOGE1("[JoinThread] unable to join worker: %s", strerror(error));
+    }
 }

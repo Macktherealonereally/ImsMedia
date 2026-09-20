@@ -40,7 +40,7 @@ DtmfEncoderNode::DtmfEncoderNode(BaseSessionCallback* callback) :
     mPtime = DEFAULT_AUDIO_INTERVAL;
 }
 
-DtmfEncoderNode::~DtmfEncoderNode() {}
+DtmfEncoderNode::~DtmfEncoderNode() { Stop(); }
 
 kBaseNodeId DtmfEncoderNode::GetNodeId()
 {
@@ -51,7 +51,10 @@ ImsMediaResult DtmfEncoderNode::Start()
 {
     mAudioFrameDuration = mSamplingRate * mPtime;
     IMLOGD1("[Start] interval[%d]", mAudioFrameDuration);
-    StartThread("DtmfEncoderNode");
+    if (!StartThread("DtmfEncoderNode"))
+    {
+        return RESULT_NOT_READY;
+    }
     mNodeState = kNodeStateRunning;
     return RESULT_SUCCESS;
 }
@@ -61,7 +64,7 @@ void DtmfEncoderNode::Stop()
     IMLOGD0("[Stop]");
     StopThread();
     mConditionDtmf.signal();
-    mConditionExit.wait_timeout(1000);
+    JoinThread();
     mNodeState = kNodeStateStopped;
 }
 

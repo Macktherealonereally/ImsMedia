@@ -122,6 +122,7 @@ void IAudioPlayerNode::Stop()
         StopThread();
         mCondition.wait_timeout(AUDIO_PLAYER_STOP_TIMEOUT);
     }
+    JoinThread();
 
     if (mAudioPlayer)
     {
