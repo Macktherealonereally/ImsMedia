@@ -163,6 +163,8 @@ private:
     bool decodeEvs(uint8_t* buffer, uint32_t size);
 
     AAudioStream* mAudioStream;
+    bool mPlaybackActive;
+    uint64_t mNextRecoveryTimeUs;
     std::atomic<AAudioStream*> mDisconnectedAudioStream;
     AMediaCodec* mCodec;
     AMediaFormat* mFormat;

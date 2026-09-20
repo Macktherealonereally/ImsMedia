@@ -45,12 +45,15 @@ static constexpr char kLowLatencyPlaybackProperty[] =
 // RFC 3267 storage headers with Q set and no following speech data.
 static constexpr uint8_t kAmrNoDataFrameHeader = 0x7C;
 static constexpr uint8_t kAmrWbSpeechLostFrameHeader = 0x74;
+static constexpr uint64_t kPlaybackRecoveryIntervalUs = 100000;
 
 using namespace android;
 
 ImsMediaAudioPlayer::ImsMediaAudioPlayer()
 {
     mAudioStream = nullptr;
+    mPlaybackActive = false;
+    mNextRecoveryTimeUs = 0;
     mCodec = nullptr;
     mFormat = nullptr;
     mCodecType = 0;
@@ -132,12 +135,14 @@ void ImsMediaAudioPlayer::ProcessCmr(const uint32_t cmr)
 bool ImsMediaAudioPlayer::Start()
 {
     ImsMediaMutex::Autolock lock(mMutex);
-    if (mAudioStream != nullptr || mCodec != nullptr || mFormat != nullptr || mSamplingRate <= 0)
+    if (mPlaybackActive || mAudioStream != nullptr || mCodec != nullptr ||
+            mFormat != nullptr || mSamplingRate <= 0)
     {
         IMLOGE0("[Start] audio player is already running or has invalid configuration");
         return false;
     }
     mDisconnectedAudioStream.store(nullptr);
+    mNextRecoveryTimeUs = 0;
 
     char kMimeType[128] = {'\0'};
     switch (mCodecType)
@@ -269,6 +274,7 @@ bool ImsMediaAudioPlayer::Start()
         }
     }
 
+    mPlaybackActive = true;
     IMLOGD0("[Start] exit");
     return true;
 }
@@ -277,6 +283,8 @@ void ImsMediaAudioPlayer::Stop()
 {
     IMLOGD0("[Stop] enter");
     ImsMediaMutex::Autolock lock(mMutex);
+    mPlaybackActive = false;
+    mNextRecoveryTimeUs = 0;
     if ((mCodecType == kAudioCodecAmr || mCodecType == kAudioCodecAmrWb) && (mCodec != nullptr))
     {
         AMediaCodec_stop(mCodec);
@@ -326,10 +334,20 @@ bool ImsMediaAudioPlayer::onDataFrame(uint8_t* buffer, uint32_t size, FrameType 
 {
     ImsMediaMutex::Autolock lock(mMutex);
 
+    if (!mPlaybackActive)
+    {
+        return false;
+    }
+
     AAudioStream* disconnectedStream = mDisconnectedAudioStream.exchange(nullptr);
     if (disconnectedStream != nullptr)
     {
         restartAudioStream(disconnectedStream);
+    }
+    else if (mAudioStream == nullptr &&
+            ImsMediaTimer::GetTimeInMicroSeconds() >= mNextRecoveryTimeUs)
+    {
+        restartAudioStream(nullptr);
     }
 
     if (mAudioStream == nullptr ||
@@ -632,10 +650,15 @@ void ImsMediaAudioPlayer::restartAudioStream(AAudioStream* disconnectedStream)
         return;
     }
 
-    AAudioStream_requestStop(mAudioStream);
-    AAudioStream_close(mAudioStream);
-
-    mAudioStream = nullptr;
+    // Retry a failed reopen on later frames while this playback session is active.
+    mNextRecoveryTimeUs = ImsMediaTimer::GetTimeInMicroSeconds() +
+            kPlaybackRecoveryIntervalUs;
+    if (mAudioStream != nullptr)
+    {
+        AAudioStream_requestStop(mAudioStream);
+        AAudioStream_close(mAudioStream);
+        mAudioStream = nullptr;
+    }
     openAudioStream();
 
     if (mAudioStream == nullptr)
@@ -668,6 +691,7 @@ void ImsMediaAudioPlayer::restartAudioStream(AAudioStream* disconnectedStream)
         return;
     }
 
+    mNextRecoveryTimeUs = 0;
     IMLOGI1("[restartAudioStream] start stream state[%s]",
             AAudio_convertStreamStateToText(nextState));
 }
