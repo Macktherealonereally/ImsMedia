@@ -1,46 +1,31 @@
-# ImsMedia test
+# Manual ImsMedia test applications
 
-## 1. Introduction
- - The `test/` directory in _ImsMedia_ contains test implementation of _ImsMedia_'.
- - Module `imsmediahal/` contains implementation of _ImsMedia_'s HAL APIs.
+This directory holds optional platform test applications. Automated regression
+suites and the host/device validation matrix are documented in
+[../tests/README.md](../tests/README.md).
 
+| Target | Source | Purpose |
+| --- | --- | --- |
+| `ImsMediaTestingApp` | `app/ImsMediaTestingApp/app` | Manual media-session controls and test UI |
+| `TestImsMediaHal` | `imsmediahal` | Test implementation of the radio IMS media AIDL interface |
 
- ## 2. Procedure to test app
+Build in a complete Android product checkout:
 
- Build `app` and `imsmediahal` under `test\` folder
+```sh
+m ImsMediaTestingApp TestImsMediaHal
+```
 
- ```
- gcert
- cd test
- mma
- ```
+Both are privileged, platform-signed apps. The HAL test app also shares the phone
+UID. Install them through a dedicated test product using that product's signing,
+privileged-permission and SELinux configuration. They are not part of normal
+`imsmedia.mk` product integration.
 
- #### 2.1 Install test app from out folder and run
- ```
- adb install imsmediatestingapp.apk
- ```
+The test HAL exposes an Android bound service. Its manifest and Java service do
+not by themselves register a vendor `IImsMedia/default` instance. Editing a VINTF
+manifest alone cannot provide that service. Configure the intended test binding
+or real HAL integration in the product before exercising that path.
 
- #### 2.2 Modify manifest file
- ```
- adb pull /vendor/etc/vintf/manifest.xml
-
- add below content in manifest file.
-
- <hal format="aidl">
-        <name>android.hardware.radio.ims.media</name>
-        <fqname>IImsMedia/default</fqname>
- </hal>
-
- push back manifest file to Device.
-
- adb push manifest.xml /vendor/etc/vintf/manifest.xml
- ```
-
- #### 2.3 Push imsmediahal apk into device from out folder
- ```
- adb push com.android.telephony.testimsmediahal /system/priv-app/
-
- adb reboot
-
- Test the Audio using test app
- ```
+The paired ImsStack/ImsMedia flow uses `ImsMediaService`. Use these applications
+for focused media-session or HAL-interface checks; complete product integration
+also requires carrier provisioning, IMS registration, signing and device audio
+route validation.
