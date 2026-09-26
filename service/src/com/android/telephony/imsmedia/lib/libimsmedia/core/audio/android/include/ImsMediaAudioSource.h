@@ -150,6 +150,8 @@ private:
     void queueInputBuffer(int16_t* buffer, uint32_t size);
     void dequeueOutputBuffer();
     static void audioErrorCallback(AAudioStream* stream, void* userData, aaudio_result_t error);
+    void resetUplinkLevel(uint32_t now);
+    void updateUplinkLevel(const int16_t* samples, int32_t count, uint32_t now);
 
     ImsMediaMutex mMutexUplink;
     IFrameCallback* mCallback;
@@ -171,6 +173,15 @@ private:
     int32_t mMediaDirection;
     bool mIsDtxEnabled;
     bool mIsOctetAligned;
+    // Uplink capture level statistics, logged periodically to tell a silent
+    // capture path apart from encoding or transport problems.
+    uint32_t mLevelStartMs;
+    uint32_t mLevelReads;
+    uint32_t mLevelEmptyReads;
+    uint32_t mLevelSilentReads;
+    uint32_t mLevelFrames;
+    int32_t mLevelPeak;
+    double mLevelSumSquares;
 };
 
 #endif
