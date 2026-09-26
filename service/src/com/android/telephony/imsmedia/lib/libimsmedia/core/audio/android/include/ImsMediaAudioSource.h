@@ -140,6 +140,15 @@ public:
      * @param cmr The codec mode request value
      */
     void ProcessCmr(const uint32_t cmr);
+
+    /**
+     * Reports the platform audio mode (AudioManager.MODE_*), or -1 if unknown.
+     *
+     * A running capture stream that was opened before the platform entered
+     * MODE_IN_COMMUNICATION is reopened once, so the vendor audio HAL opens its
+     * input stream with the communication (VoIP) capture configuration.
+     */
+    static void SetPlatformAudioMode(int32_t mode);
     virtual void* run();
 
 private:
@@ -150,6 +159,7 @@ private:
     void queueInputBuffer(int16_t* buffer, uint32_t size);
     void dequeueOutputBuffer();
     static void audioErrorCallback(AAudioStream* stream, void* userData, aaudio_result_t error);
+    bool needsReopenForAudioMode();
     void resetUplinkLevel(uint32_t now);
     void updateUplinkLevel(const int16_t* samples, int32_t count, uint32_t now);
 
@@ -173,6 +183,9 @@ private:
     int32_t mMediaDirection;
     bool mIsDtxEnabled;
     bool mIsOctetAligned;
+    // Platform audio mode when the current capture stream was opened, -1 if unknown.
+    std::atomic<int32_t> mStreamAudioMode;
+    static std::atomic<int32_t> sPlatformAudioMode;
     // Uplink capture level statistics, logged periodically to tell a silent
     // capture path apart from encoding or transport problems.
     uint32_t mLevelStartMs;
